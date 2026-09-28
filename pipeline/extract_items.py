@@ -52,22 +52,27 @@ def rows_for_state(state):
                 if not data or data[0][:5] != HEADER:
                     continue
                 hdr = t.rows[0].cells
-                xs = [c[0] for c in hdr[:6]]            # col starts 0..5
-                x_num = t.rows[1].cells[6][0]           # start of numeric block
-                for row in t.rows[2:]:
+                # two PRABANDH templates: v1 (13 cols: R/NR column, State Proposal /
+                # Recommended by DoSEL over a second header row) and v2 (12 cols, one
+                # header row, no R/NR column — Maharashtra 2026-27)
+                v2 = len(data[0]) == 12
+                NUM0 = 5 if v2 else 6
+                x_num = hdr[5][0] if v2 else t.rows[1].cells[6][0]   # start of numeric block
+                xs = [c[0] for c in hdr[:5]] + [x_num if v2 else hdr[5][0]]
+                for row in t.rows[1 if v2 else 2:]:
                     cells = row.cells
                     per_row = [c for c in cells[4:] if c]
                     if not per_row:
                         continue
                     top = min(c[1] for c in per_row); bot = max(c[3] for c in per_row)
                     left = [w for w in words if w['x1'] <= x_num + 1 and w['top'] >= top - 1 and w['bottom'] <= bot + 1]
-                    txt = {i: (crop(page, cells[i]) if cells[i] and cells[i][0] >= x_num - 1 else None) for i in range(6, 13)}
+                    txt = {i: (crop(page, cells[i]) if cells[i] and cells[i][0] >= x_num - 1 else None) for i in range(NUM0, NUM0 + 7)}
                     # col 4/5 cells can be the tail of a subtotal cell spanning cols c..5
-                    c4 = cells[4] if cells[4] and cells[4][0] >= xs[4] - 1 else None
-                    c5 = cells[5] if cells[5] and cells[5][0] >= xs[5] - 1 else None
-                    yield pno, dict(xs=xs, left=left, c4=crop(page, c4), c5=crop(page, c5),
-                                    nums=[txt[i] for i in range(6, 12)], remark=clean(txt[12]),
-                                    top=top)
+                    c4 = cells[4] if cells[4] and cells[4][0] >= xs[4] - 1 and cells[4][2] <= x_num + 1 else None
+                    c5 = None if v2 else (cells[5] if cells[5] and cells[5][0] >= xs[5] - 1 else None)
+                    yield pno, dict(xs=xs, left=left, c4=crop(page, c4), c5=crop(page, c5) if c5 else None,
+                                    nums=[txt[i] for i in range(NUM0, NUM0 + 6)], remark=clean(txt[NUM0 + 6]),
+                                    top=top, v2=v2)
 
 
 def col_of(x, xs):
@@ -151,6 +156,33 @@ def assign(events):
     return items, subs
 
 
+NR_HINT = re.compile(r'\bNR\b|non[- ]?recurring|\(NR\)|- NR|civil|construction|furniture|equipment|repair|toilet|classroom|boundary|lab\b|hardware|smart class|bedding|utensil|almirah|kit\b', re.I)
+
+
+def infer_rnr(out):
+    """v2 sheets (Maharashtra) print no R/NR column. PRABANDH activity codes are a
+    national master, so take the flag the same code carries in the v1 states; for
+    codes seen nowhere else fall back to the activity/sub-activity wording.
+    validate.py then checks the split against the state's own R/NR summary."""
+    known = {}
+    for st, d in out.items():
+        for i in d['items']:
+            if i['rnr'] in ('R', 'NR'):
+                known.setdefault(i['code'], i['rnr'])
+    for st, d in out.items():
+        n_code = n_hint = 0
+        for i in d['items']:
+            if i['rnr'] in ('R', 'NR'):
+                continue
+            if i['code'] in known:
+                i['rnr'] = known[i['code']]; i['rnr_src'] = 'code'; n_code += 1
+            else:
+                i['rnr'] = 'NR' if NR_HINT.search(f"{i['activity']} {i['subactivity']}") else 'R'
+                i['rnr_src'] = 'wording'; n_hint += 1
+        if n_code or n_hint:
+            print(f'{st}: R/NR inferred for {n_code} items by code, {n_hint} by wording')
+
+
 def main():
     out = {}
     for st in STATES:
@@ -160,6 +192,7 @@ def main():
         print(f'{st}: {len(items)} items, {len(subs)} subtotals, '
               f'no-code {sum(1 for i in items if not i["code"])}, unassigned {miss}, '
               f'no-scheme {sum(1 for i in items if not i["scheme"])}')
+    infer_rnr(out)
     (WORK / 'items_raw.json').write_text(json.dumps(out, indent=1, ensure_ascii=False))
 
 

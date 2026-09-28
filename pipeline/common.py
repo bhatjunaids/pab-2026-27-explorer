@@ -7,9 +7,12 @@ DATA = ROOT / 'data'
 
 # page ranges located by classifying every page (see README)
 STATES = {
-    'Haryana': dict(name='Haryana', rec_pages=(36, 101), spill_pages=(15, 26), school_pages=None),
-    'MP': dict(name='Madhya Pradesh', rec_pages=(40, 91), spill_pages=(17, 29), school_pages=(94, 377)),
-    'UP': dict(name='Uttar Pradesh', rec_pages=(42, 94), spill_pages=(17, 31), school_pages=(97, 1893)),
+    'Haryana': dict(name='Haryana', abbr='HR', rec_pages=(36, 101), spill_pages=(15, 26), school_pages=None),
+    'MP': dict(name='Madhya Pradesh', abbr='MP', rec_pages=(40, 91), spill_pages=(17, 29), school_pages=(94, 377)),
+    'UP': dict(name='Uttar Pradesh', abbr='UP', rec_pages=(42, 94), spill_pages=(17, 31), school_pages=(97, 1893)),
+    'KN': dict(name='Karnataka', abbr='KA', rec_pages=(39, 87), spill_pages=(19, 29), school_pages=(89, 226)),
+    'MH': dict(name='Maharashtra', abbr='MH', rec_pages=(37, 96), spill_pages=(16, 27), school_pages=None),
+    'TG': dict(name='Telangana', abbr='TG', rec_pages=(36, 84), spill_pages=(15, 26), school_pages=(86, 592)),
 }
 
 

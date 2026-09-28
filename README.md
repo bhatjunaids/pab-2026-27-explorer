@@ -1,7 +1,8 @@
-# Samagra Shiksha PAB 2026-27 Explorer — Haryana, MP, UP
+# Samagra Shiksha PAB 2026-27 Explorer — Haryana, MP, UP, Karnataka, Maharashtra, Telangana
 
 An interactive dashboard over the Project Approval Board (PAB) minutes for the
-2026-27 AWP&B of **Haryana**, **Madhya Pradesh** and **Uttar Pradesh**.
+2026-27 AWP&B of **Haryana**, **Madhya Pradesh**, **Uttar Pradesh**, **Karnataka**, **Maharashtra**
+and **Telangana**. The state buttons in the header choose which states every tab compares.
 
 **Live:** https://bhatjunaids.github.io/pab-2026-27-explorer/
 
@@ -36,18 +37,20 @@ python3 build_data.py        # minutes-vs-annexure reconciliation, writes docs/d
 
 or simply `./build.sh`.
 
-* **737 line items** reconcile with every printed subtotal, every sub-component and major-component row, the scheme totals and the FLN row, on both the proposal and recommendation side; qty × unit cost = amount on all 1,474 sides.
-* **333 spill-over works** reconcile with the Annexure II scheme table and major-component pivot.
-* **59,719 school-list rows** — for 47 works the listed quantity equals the recommended physical quantity exactly.
+* **1,473 line items** reconcile with every printed subtotal, every sub-component and major-component row, the scheme totals and the FLN row, on both the proposal and recommendation side (2,300 checks); qty × unit cost = amount on all 2,946 sides.
+* **554 spill-over works** reconcile with the Annexure II scheme table and major-component pivot.
+* **77,725 school-list rows** (MP, UP, Karnataka, Telangana) — for 93 works the listed quantity equals the recommended physical quantity exactly.
 * **Minutes Section II** (the financial table) is recomputed from the annexures: every row matches to within rounding.
-* Section I (indicators) is transcribed in `pipeline/minutes.py`. Haryana has a text layer; **MP and UP are scans whose OCR is unreliable, so their figures were read from the rendered page images.** Every figure carries its PDF page.
+* The minutes' narrative is transcribed in `pipeline/minutes.py`. Only Haryana has a usable text layer. **MP, UP and Maharashtra have unreliable OCR and Karnataka and Telangana have none, so their figures were read from rendered page images.** Every figure carries its PDF page.
+* **Two PRABANDH templates.** Maharashtra's sheet is a newer layout (12 columns, no R/NR column). `extract_items.py` reads both; Maharashtra's R/NR flag is taken from the national activity code (or wording, for 62 codes seen nowhere else) and then verified against Maharashtra's own recurring / non-recurring totals for every major component.
 
 ### Findings from the cross-check
 
-1. **MP** (PDF p.12) and **UP** (PDF p.12): para (i) of Section II states central and state shares that do not add up to the approved total with the opening balance; para (ii) of the same section does. The dashboard uses para (ii).
+1. **MP**, **UP** and **Maharashtra** (PDF p.12 in each): para (i) of Section II states central and state shares that do not add up to the approved total with the opening balance; para (ii) of the same section does. The dashboard uses para (ii).
 2. **UP** (PDF p.5): para 1 gives government enrolment share as 52.3%, para 3 as 39.1%; 39.1% is consistent with the unaided share and is used.
-3. The minutes' "spill-over" is Annexure II's *Balance Remaining* (before cancellations), not its *Actual Spillover*.
+3. The minutes define "spill-over" differently: Haryana, MP, UP and Maharashtra print Annexure II's *Balance Remaining* (before cancellations); Karnataka and Telangana print its *Actual Spillover* (after). `build_data.py` detects the basis per state and reconciles each on its own.
 4. PRABANDH names the vocational sub component differently in line items and summary; UP's "Opening of New School" is rolled into "Opening of New / Upgraded Schools". Both are aliased (`SUB_ALIAS` in `pipeline/common.py`) only after the totals were shown to match.
+5. **Maharashtra's approval is interim** — Samagra Shiksha 3.0 is pending and a supplementary PAB will follow. Its minutes' index lists an Annexure IV school list that the PDF does not contain.
 
 ## Ask — how it stays honest
 
@@ -64,7 +67,12 @@ the spec that ran is always shown. Two translators produce the same spec:
 
 The PDFs report ₹ lakh; the site shows ₹ crore (1 crore = 100 lakh) and unit costs in rupees.
 "Per govt child" uses the government-school enrolment share quoted in each minutes
-(Haryana 38%, MP 53.6%, UP 39.1%) and is approximate.
+(Haryana 38%, MP 53.6%, UP 39.1%, Maharashtra 24%, Telangana 35.3%; Karnataka's minutes do not state it) and is approximate.
 
 Source: PAB minutes for AWP&B 2026-27 — Haryana (05.06.2026), Madhya Pradesh (03.06.2026),
-Uttar Pradesh (14.05.2026), Department of School Education & Literacy, Ministry of Education.
+Uttar Pradesh (14.05.2026), Karnataka (10.06.2026), Maharashtra (20.05.2026), Telangana (10.06.2026),
+Department of School Education & Literacy, Ministry of Education.
+
+To add a state: put its PDF in `pdfs/` as `<CODE>.pdf`, add a row to `STATES` in `pipeline/common.py`
+(page ranges for Annexure III detail tables, Annexure II and Annexure IV), transcribe its narrative in
+`pipeline/minutes.py`, and run `./build.sh` — it stops on any total that fails to reconcile.

@@ -40,7 +40,8 @@ const ASK = (() => {
     works: [], indicators: [],
   };
   const OPS = [">", ">=", "<", "<=", "=", "!="];
-  const STATES = ["Haryana", "MP", "UP"];
+  const ALLST = () => PAB.ALL;          // every state in the data
+  const SHOWN = () => PAB.ST;           // states selected in the header picker
 
   /* ---------------- vocabulary ---------------- */
   const SYN = [
@@ -103,7 +104,7 @@ const ASK = (() => {
     const D = PAB.D, w = new Set();
     const add = s => String(s || "").toLowerCase().split(/[^a-z0-9]+/).forEach(x => x.length > 2 && w.add(x));
     D.items.forEach(i => { add(i.maj); add(i.sub); add(i.act); add(i.sa); });
-    STATES.forEach(s => D.spill[s].items.forEach(i => { add(i.sub); add(i.activity); add(i.subactivity); }));
+    ALLST().forEach(s => D.spill[s].items.forEach(i => { add(i.sub); add(i.activity); add(i.subactivity); }));
     D.school_masters.forEach(m => { add(m.m); add(m.act); });
     return vocab.v = w;
   }
@@ -117,6 +118,10 @@ const ASK = (() => {
     if (/haryana|\bHR\b/.test(raw) || /haryana/.test(s)) spec.states.push("Haryana");
     if (/madhya|\bMP\b/.test(raw) || /\bm\.p\.?\b/.test(s)) spec.states.push("MP");
     if (/uttar|\bUP\b/.test(raw) || /\bu\.p\.?\b/.test(s)) spec.states.push("UP");
+    if (/karnata?ka|\b(KA|KN|KAR)\b/.test(raw) || /karnata?ka/.test(s)) spec.states.push("KN");
+    if (/maha?rash?tra|\bMH\b/.test(raw) || /maha?rash?tra/.test(s)) spec.states.push("MH");
+    if (/telangana|\b(TG|TS)\b/.test(raw) || /telangana/.test(s)) spec.states.push("TG");
+    spec.states = spec.states.filter(x => ALLST().includes(x));
     if (spec.states.length) signals++;
     if (/elementary/.test(s)) spec.schemes.push("E");
     if (/\bsecondary\b/.test(s) && !/senior secondary|higher secondary|secondary schools? (have|with)/.test(s)) spec.schemes.push("S");
@@ -165,7 +170,7 @@ const ASK = (() => {
       [/sub[- ]?components?/, "sub"], [/major components?|by components?|component[- ]wise|by head/, "major"], [/activit/, "activity"],
       [/by scheme|scheme[- ]wise/, "scheme"], [/line items?|by items?|which items|what items|items/, "item"], [/type of work|kind of work|which works|by work/, "work"]];
     for (const [re, v] of g) if (re.test(s) && GROUPS[spec.dataset].includes(v)) { spec.group_by = v; signals++; break; }
-    if (/compare|\bvs\.?\b|versus|across (the )?states|each state|all three|between/.test(s)) { spec.compare_states = true; signals++; }
+    if (/compare|\bvs\.?\b|versus|across (the )?states|each state|all (three|six|states)|between/.test(s)) { spec.compare_states = true; signals++; }
     if (/lowest|least|smallest|bottom|minimum/.test(s)) spec.sort = "asc";
     const lim = s.match(/(?:top|first|bottom|largest|biggest|highest|lowest|smallest)\s+(\d{1,3})|(\d{1,3})\s+(?:largest|biggest|highest|lowest|smallest|top|items|districts)/);
     if (lim) spec.limit = Math.min(100, +(lim[1] || lim[2]));
@@ -216,7 +221,7 @@ const ASK = (() => {
       required: ["dataset", "states", "schemes", "terms", "search_remarks", "rnr", "conditions", "condition_level", "group_by", "measure", "compare_states", "sort", "limit", "indicator_ids"],
       properties: {
         dataset: {type: "string", enum: DATASETS},
-        states: {type: "array", items: {type: "string", enum: STATES}},
+        states: {type: "array", items: {type: "string", enum: ALLST()}},
         schemes: {type: "array", items: {type: "string", enum: ["E", "S", "T"]}},
         terms: {type: "array", items: {type: "string"}},
         search_remarks: {type: "boolean"},
@@ -240,12 +245,12 @@ const ASK = (() => {
     const works = [...new Set(D.school_masters.map(m => m.m))];
     return [
       `You translate questions about Samagra Shiksha Project Approval Board (PAB) approvals for 2026-27 into a filter spec. You never state numbers; a program computes every figure from the spec you return.`,
-      `States: Haryana, MP (Madhya Pradesh), UP (Uttar Pradesh). Schemes: E Elementary (includes FLN), S Secondary, T Teacher Education. Empty arrays mean "all".`,
+      `States (use these exact codes): ${ALLST().map(s => `${s} = ${PAB.sname(s)}`).join(", ")}. An empty states array means the states the reader has selected (${SHOWN().join(", ")}). Schemes: E Elementary (includes FLN), S Secondary, T Teacher Education. Empty arrays mean "all".`,
       `Datasets:`,
       `- items: ${D.items.length} line items of the fresh 2026-27 plan, each with state proposal and DoSEL recommendation. Hierarchy: major > sub > activity > item. measures: recommended, proposed, cut (proposed − recommended), cut_pct, quantity (recommended physical qty), unit_cost (recommended ₹ per unit), count, share_pct (share of the state's fresh approval), per_child (₹ per government-school child). group_by: none (list individual line items), state, scheme, major, sub, activity, item (national activity code — same item across states).`,
       `- spill: works sanctioned in earlier years still open (spill-over). measures: spillover, approved, completed, cancelled, count. group_by: none, state, scheme, major, sub, item.`,
       `- utilisation: 2025-26 approval vs expenditure by component. measures: spent_pct, approved, spent. group_by: state, major, sub.`,
-      `- works: school-wise list of fresh non-recurring approvals (MP and UP only). measures: schools (count of school approvals), quantity. group_by: state, district, work (type of work). Work types: ${works.join("; ")}.`,
+      `- works: school-wise list of fresh non-recurring approvals (only ${ALLST().filter(s => PAB.D.checks.school_rows[s]).join(", ")} have school lists). measures: schools (count of school approvals), quantity. group_by: state, district, work (type of work). Work types: ${works.join("; ")}.`,
       `- indicators: educational indicators from the minutes; choose indicator_ids. Ids: ${D.minutes.indicators.map(i => `${i.id} = ${i.label}`).join("; ")}.`,
       `terms: phrases matched case-insensitively against component/activity/item names (every term must match; use "a|b" for alternatives within one term). Keep terms short and use the names' own words. Major components: ${majors.join("; ")}. Sub components: ${subs.join("; ")}. Common mappings: KGBV → "kasturba|kgbv"; teacher salaries → "financial support for teachers"; FLN → "foundational literacy"; ICT → "ict|digital"; CwSN → "children with special needs|cwsn". Set search_remarks true only when the question is about the appraisal remarks/reasons.`,
       `conditions: amounts (recommended, proposed, cut, spillover, approved, completed, cancelled, spent) are in ₹ crore; cut_pct and spent_pct are percentages 0–100; unit_cost is in rupees. "Not recommended / rejected" = recommended = 0 AND proposed > 0. condition_level "row" tests each line item/work before grouping; "group" tests each group's totals after grouping (e.g. "sub components cut by more than 30%" = group).`,
@@ -301,7 +306,7 @@ const ASK = (() => {
     const spec = {};
     spec.dataset = DATASETS.includes(o.dataset) ? o.dataset : (o.dataset && warn.push(`Unknown dataset “${o.dataset}”; used line items.`), "items");
     const arr = v => Array.isArray(v) ? v : [];
-    spec.states = arr(o.states).filter(s => { const ok = STATES.includes(s); if (!ok) warn.push(`Dropped unknown state “${s}”.`); return ok; });
+    spec.states = arr(o.states).filter(s => { const ok = ALLST().includes(s); if (!ok) warn.push(`Dropped unknown state “${s}”.`); return ok; });
     spec.schemes = arr(o.schemes).filter(s => ["E", "S", "T"].includes(s));
     spec.terms = arr(o.terms).filter(t => typeof t === "string" && t.trim()).map(t => t.trim().toLowerCase().slice(0, 80)).slice(0, 8);
     spec.search_remarks = !!o.search_remarks;
@@ -321,7 +326,8 @@ const ASK = (() => {
     spec.limit = Number.isInteger(o.limit) ? Math.max(1, Math.min(100, o.limit)) : 15;
     const ids = PAB.D.minutes.indicators.map(i => i.id);
     spec.indicator_ids = arr(o.indicator_ids).filter(i => ids.includes(i));
-    if (spec.dataset === "works" && spec.states.some(s => s === "Haryana")) warn.push("Haryana has no school list (no fresh non-recurring approvals).");
+    const noList = spec.states.filter(s => !PAB.D.checks.school_rows[s]);
+    if (spec.dataset === "works" && noList.length) warn.push(`${noList.map(PAB.sname).join(", ")}: no school list in the PDF.`);
     return {spec, warn};
   }
 
@@ -331,7 +337,7 @@ const ASK = (() => {
 
   function execute(spec) {
     const {D, sum, groupBy, sname} = PAB;
-    const states = spec.states.length ? spec.states : STATES;
+    const states = spec.states.length ? spec.states : SHOWN();
     const out = {kind: "group", rows: [], states, measure: spec.measure, fmt: null, total: null};
     if (spec.dataset === "indicators") {
       const ids = spec.indicator_ids.length ? spec.indicator_ids : [];
@@ -341,7 +347,7 @@ const ASK = (() => {
     }
     if (spec.dataset === "items" || spec.dataset === "spill") {
       let rows = spec.dataset === "items" ? D.items.slice()
-        : STATES.flatMap(s => D.spill[s].items.map(i => ({st: s, sch: i.scheme, maj: i.major, sub: i.sub, act: i.activity, sa: i.subactivity, code: i.code,
+        : ALLST().flatMap(s => D.spill[s].items.map(i => ({st: s, sch: i.scheme, maj: i.major, sub: i.sub, act: i.activity, sa: i.subactivity, code: i.code,
           approved: i.appr_amt, completed: i.done_amt, cancelled: i.cancelled, spillover: i.spillover, rem: "", pg: i.page})));
       rows = rows.filter(r => states.includes(r.st) && (!spec.schemes.length || spec.schemes.includes(r.sch)) && (spec.rnr === "any" || spec.dataset !== "items" || r.rnr === spec.rnr));
       if (spec.terms.length) rows = rows.filter(r => termMatch(spec.terms, `${r.maj}|${r.sub}|${r.act}|${r.sa}|${r.code}${spec.search_remarks ? "|" + r.rem : ""}`.toLowerCase()));
@@ -400,7 +406,7 @@ const ASK = (() => {
       }
     }
     if (spec.dataset === "works") {
-      const ws = states.filter(s => s !== "Haryana");
+      const ws = states.filter(s => D.checks.school_rows[s]);
       let a = D.school_agg.filter(([m]) => ws.includes(D.school_masters[m].st));
       if (spec.terms.length) a = a.filter(([m]) => termMatch(spec.terms, `${D.school_masters[m].m}|${D.school_masters[m].act}|${D.school_masters[m].sub}`.toLowerCase()));
       out.matched = a;
@@ -441,7 +447,7 @@ const ASK = (() => {
   function chips(spec) {
     const {esc, sname} = PAB;
     const c = [`<span class="chip">data <b>${DLAB[spec.dataset]}</b></span>`];
-    c.push(`<span class="chip">states <b>${spec.states.length ? spec.states.map(sname).join(", ") : "all three"}</b></span>`);
+    c.push(`<span class="chip">states <b>${spec.states.length ? spec.states.map(sname).join(", ") : `all shown (${SHOWN().map(PAB.abbr).join(", ")})`}</b></span>`);
     if (spec.schemes.length) c.push(`<span class="chip">scheme <b>${spec.schemes.map(s => PAB.SCHEME[s]).join(", ")}</b></span>`);
     spec.terms.forEach(t => c.push(`<span class="chip">${spec.search_remarks ? "name or remark" : "name"} contains <b>${esc(t.split("|").join(" or "))}</b></span>`));
     if (spec.rnr !== "any") c.push(`<span class="chip"><b>${spec.rnr === "R" ? "recurring" : "non-recurring"}</b> only</span>`);
@@ -521,6 +527,8 @@ const ASK = (() => {
     "Compare FLN recommended across states by activity",
     "Spill-over by major component",
     "Which districts in UP get the most smart classrooms?",
+    "Compare KGBV recommended in Karnataka, Maharashtra and Telangana",
+    "Which districts in Telangana get the most works?",
     "2025-26 utilisation by sub component",
     "GER at secondary stage",
     "Teacher vacancies",

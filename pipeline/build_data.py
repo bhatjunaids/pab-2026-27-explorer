@@ -75,28 +75,34 @@ def rc(st, label, printed, derived, source, tol=0.6, known=None):
         fails.append(f'{st}: minutes {label}: printed {printed} vs annexure {derived:.2f}')
 
 
+spill_basis = {}
 for st in STATES:
     F = M['fin'][st]
     its = [i for i in ITEMS if i['st'] == st]
     sp = {s['scheme']: s for s in spill[st]['schemes']}
+    # States print either Annexure II's Balance Remaining (before cancellations)
+    # or its Actual Spillover (after). Detect which, per state, from the total.
+    basis = 'balance' if near(F['total']['spill'], spill[st]['summary']['balance']) else 'spillover'
+    spill_basis[st] = basis
+    blabel = 'Annexure II balance remaining' if basis == 'balance' else 'Annexure II actual spill-over (net of cancellations)'
     for sch in 'EST':
         row = F['rows'][sch]
         r = sum(i['ra'] for i in its if i['sch'] == sch and i['rnr'] == 'R')
         nr = sum(i['ra'] for i in its if i['sch'] == sch and i['rnr'] == 'NR')
         rc(st, f'{sch} recurring (fresh)', row['rec'], r, 'Annexure III line items')
         rc(st, f'{sch} non-recurring (fresh)', row['nr'], nr, 'Annexure III line items')
-        rc(st, f'{sch} spill-over', row['spill'], sp[sch]['balance'], 'Annexure II balance remaining')
-        rc(st, f'{sch} grand total', row['total'], r + nr + sp[sch]['balance'], 'Annexures II + III')
+        rc(st, f'{sch} spill-over', row['spill'], sp[sch][basis], blabel)
+        rc(st, f'{sch} grand total', row['total'], r + nr + sp[sch][basis], 'Annexures II + III')
     fln = sum(i['ra'] for i in its if i['sub'].startswith('Foundational Literacy'))
     rc(st, 'FLN approved', F['fln'], fln, 'Annexure III FLN sub component')
     tot = F['total']
     rc(st, 'Total fresh approval', tot['fresh'], sum(i['ra'] for i in its), 'Annexure III line items')
     # funding identity: opening balance + central + state = grand total
-    for which in ('para_i', 'para_ii'):
+    for which in [w for w in ('para_i', 'para_ii') if w in F]:
         p = F[which]
         s_ = p['opening'] + p['central'] + p['state']
         known = None
-        if which == 'para_i' and not near(s_, tot['total'], 2):
+        if which == 'para_i' and 'para_ii' in F and not near(s_, tot['total'], 2):
             known = (f'Para (i) of Section II gives central {p["central"]:,.2f} + state {p["state"]:,.2f} '
                      f'+ opening balance {p["opening"]:,.2f} = {s_:,.2f} lakh, which does not equal the '
                      f'approved total of {tot["total"]:,.2f} lakh. Para (ii) of the same section '
@@ -104,7 +110,7 @@ for st in STATES:
             findings.append(dict(st=st, severity='discrepancy', page=F['page'], text=known))
         rc(st, f'Funding identity, {which.replace("_", " ")} (opening + central + state = total)',
            tot['total'], s_, 'Minutes Section II', tol=2.0, known=known)
-    p = M['fin'][st]['para_ii']
+    p = F.get('para_ii', F['para_i'])
     share = p['central'] / (p['central'] + p['state'])
     rc(st, 'Central share of new releases (%)', 60.0, share * 100, 'Minutes para (ii)', tol=0.05)
 
@@ -112,10 +118,24 @@ findings.append(dict(st='UP', severity='discrepancy', page=5,
     text='Para 1 of the UP minutes says government institutions hold 52.3% of enrolment and 39.1% of teachers; '
          'para 3 says government schools hold 39.1% of enrolment and unaided schools 51.7%. '
          'The dashboard uses para 3 (39.1%), which is internally consistent with the unaided share.'))
+_bal = [STATES[s]['name'] for s in STATES if spill_basis[s] == 'balance']
+_net = [STATES[s]['name'] for s in STATES if spill_basis[s] == 'spillover']
 findings.append(dict(st='All', severity='definition', page=None,
-    text='"Spill over" in the minutes’ financial table is Annexure II’s Balance Remaining (approved − completed − surrendered). '
-         'Annexure II also reports Cancel Amount; balance net of cancellations is its "Actual Spillover". '
-         'Both are shown on the Spill-over tab.'))
+    text='The minutes do not define "spill over" the same way. ' + ', '.join(_bal) + ' print Annexure II’s Balance Remaining '
+         '(approved − completed − surrendered, before cancellations); ' + ', '.join(_net) + ' print its Actual Spillover, net of the '
+         'cancelled 2018-19 to 2020-21 works. Each state’s total is reconciled on its own basis; the Spill-over tab shows both measures.'))
+if 'MH' in STATES:
+    findings.append(dict(st='MH', severity='definition', page=5,
+        text='The Maharashtra PAB approvals are interim: the Secretary stated that Samagra Shiksha 3.0 is pending approval and an '
+             'additional PAB will supplement these approvals.'))
+    findings.append(dict(st='MH', severity='definition', page=None,
+        text='Maharashtra’s recommendation sheet uses a newer PRABANDH template with no Recurring / Non-recurring column. Each line '
+             'item’s flag is taken from the same national activity code in the other states (or, for codes seen nowhere else, '
+             'from its wording), and the resulting split reconciles exactly with Maharashtra’s own recurring and non-recurring '
+             'totals for every major component.'))
+    findings.append(dict(st='MH', severity='definition', page=4,
+        text='The Maharashtra minutes’ index lists an Annexure IV school list, but the PDF supplied ends at Annexure III, so '
+             'Maharashtra has no school-wise works on the Works & schools tab.'))
 findings.append(dict(st='All', severity='definition', page=None,
     text='PRABANDH names the vocational sub component "Introduction of Skill Education at Secondary and higher Secondary" '
          'in line items and "Introduction of Vocational Education…" in its summary table. They are the same '
@@ -159,7 +179,7 @@ for b in bad:
 # ---------- assemble ------------------------------------------------------------------
 enrol = {i['id']: i for i in M['indicators']}['enrolment']['values']
 schools_n = {i['id']: i for i in M['indicators']}['schools']['values']
-state_meta = {st: dict(name=STATES[st]['name'], short=st, **M['meeting'][st],
+state_meta = {st: dict(name=STATES[st]['name'], short=st, abbr=STATES[st]['abbr'], **M['meeting'][st],
                        enrolment=enrol[st]['v'], schools=schools_n[st]['v']) for st in STATES}
 
 checks = dict(
@@ -177,7 +197,7 @@ data = dict(
     generated=datetime.date.today().isoformat(),
     states=state_meta,
     items=ITEMS,
-    summary={st: dict(plan_vs_rec=summ[st]['plan_vs_rec'], innov=summ[st]['innov_mmmer'][0],
+    summary={st: dict(plan_vs_rec=summ[st]['plan_vs_rec'], innov=(summ[st]['innov_mmmer'] or [None])[0],
                       glance=summ[st]['glance_2526'], major_2526=summ[st]['major_2526'],
                       sub_2526=summ[st]['sub_2526'], major_2627=summ[st]['major_2627'],
                       sub_2627=summ[st]['sub_2627']) for st in STATES},
